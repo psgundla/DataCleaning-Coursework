@@ -5,6 +5,7 @@
 # Copyright (c) PSG, 2024
 # 
 # Date: 2024-04-08
+# Last updated: 2026-08-31
 #
 # Script Name: run_analysis.R
 #
@@ -15,10 +16,10 @@
 # Notes: 
 ## input files: x_train.txt,x_test.txt,y_train.txt,y_test.txt,subject_train.txt,subject_test.txt
 ##              features.txt, activity_labels.txt
-## output files: tidy_average_data.txt, combinedcleaningdata.txt
+## output file: TidyDataSet.txt
 ##
 ##
-## The script below uses dplyr, tidyr, gsubfn, and data.table for this Project.
+## The script below uses base R only.
 ## The actions performed are mentioned below
 ## 1. Merges the training and the test sets to create one data set.
 ## 2. Extracts only the measurements on the mean and standard deviation for each measurement.
@@ -29,67 +30,78 @@
 ##################################################################
 ##              Environment and Libraries Setup                 ##
 ##################################################################
-# SET WORKING DIRECTORY -----------------------------
-cat("SETTING WORKING DIRECTORY...\n\n", sep = "")
-wd <- "DataCleaningCoursera/"
-setwd(wd)
-cat("WORKING DIRECTORY HAS BEEN SET TO: ", wd, sep = "")
-
-
-required_packages <- c("data.table", "dplyr", "tidyr")
-new_packages <- required_packages[!(required_packages %in% installed.packages()[,"Package"])]
-if(length(new_packages)) install.packages(new_packages)
-lapply(required_packages, library, character.only = TRUE)
+# RUN FROM CURRENT WORKING DIRECTORY ----------------
+cat("Working directory: ", getwd(), "\n", sep = "")
 
 ## getting the data
-# from zip file
-# wd in variable
-path <- getwd()
 url <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-download.file(url, file.path(path, "data.zip"))
-unzip(zipfile = "data.zip")
+expected_sha256 <- "50dabbc800629611831a85b8b71c87040525ca4af6a152c6ba9360ecee6b92dc"
+expected_md5 <- "d29710c9530a31f303801b6bc34bd895"
+data_directory <- file.path(getwd(), "UCI HAR Dataset")
+dataset_path <- function(...) file.path(data_directory, ...)
+required_files <- c(
+  dataset_path("activity_labels.txt"),
+  dataset_path("features.txt"),
+  dataset_path("test", "subject_test.txt"),
+  dataset_path("test", "X_test.txt"),
+  dataset_path("test", "y_test.txt"),
+  dataset_path("train", "subject_train.txt"),
+  dataset_path("train", "X_train.txt"),
+  dataset_path("train", "y_train.txt")
+)
 
-#Activity labels and features
-activitylabels <- read.table("./UCI HAR Dataset/activity_labels.txt",col.names = c('index','activityNames'))
-features <- read.table("./UCI HAR Dataset/features.txt", col.names = c("index", "featureNames"))
-file_paths <- list.files("./UCI HAR Dataset",full.names = T,recursive = T)
-file_paths
-# [1] "./UCI HAR Dataset/activity_labels.txt"                         
-# [2] "./UCI HAR Dataset/features_info.txt"                           
-# [3] "./UCI HAR Dataset/features.txt"                                
-# [4] "./UCI HAR Dataset/README.txt"                                  
-# [5] "./UCI HAR Dataset/test/Inertial Signals/body_acc_x_test.txt"   
-# [6] "./UCI HAR Dataset/test/Inertial Signals/body_acc_y_test.txt"   
-# [7] "./UCI HAR Dataset/test/Inertial Signals/body_acc_z_test.txt"   
-# [8] "./UCI HAR Dataset/test/Inertial Signals/body_gyro_x_test.txt"  
-# [9] "./UCI HAR Dataset/test/Inertial Signals/body_gyro_y_test.txt"  
-# [10] "./UCI HAR Dataset/test/Inertial Signals/body_gyro_z_test.txt"  
-# [11] "./UCI HAR Dataset/test/Inertial Signals/total_acc_x_test.txt"  
-# [12] "./UCI HAR Dataset/test/Inertial Signals/total_acc_y_test.txt"  
-# [13] "./UCI HAR Dataset/test/Inertial Signals/total_acc_z_test.txt"  
-# [14] "./UCI HAR Dataset/test/subject_test.txt"                       
-# [15] "./UCI HAR Dataset/test/X_test.txt"                             
-# [16] "./UCI HAR Dataset/test/y_test.txt"                             
-# [17] "./UCI HAR Dataset/train/Inertial Signals/body_acc_x_train.txt" 
-# [18] "./UCI HAR Dataset/train/Inertial Signals/body_acc_y_train.txt" 
-# [19] "./UCI HAR Dataset/train/Inertial Signals/body_acc_z_train.txt" 
-# [20] "./UCI HAR Dataset/train/Inertial Signals/body_gyro_x_train.txt"
-# [21] "./UCI HAR Dataset/train/Inertial Signals/body_gyro_y_train.txt"
-# [22] "./UCI HAR Dataset/train/Inertial Signals/body_gyro_z_train.txt"
-# [23] "./UCI HAR Dataset/train/Inertial Signals/total_acc_x_train.txt"
-# [24] "./UCI HAR Dataset/train/Inertial Signals/total_acc_y_train.txt"
-# [25] "./UCI HAR Dataset/train/Inertial Signals/total_acc_z_train.txt"
-# [26] "./UCI HAR Dataset/train/subject_train.txt"                     
-# [27] "./UCI HAR Dataset/train/X_train.txt"                           
-# [28] "./UCI HAR Dataset/train/y_train.txt" 
-xTrain <- read.table(file_paths[27])
-yTrain <- read.table(file_paths[28])
-xTest <- read.table(file_paths[15])
-yTest <- read.table(file_paths[16])
-subTrain <- read.table(file_paths[26])
-subTest <- read.table(file_paths[14])
-activityLabels<- read.table(file_paths[1])
-features<- read.table(file_paths[3])
+if (!all(file.exists(required_files))) {
+  download_dataset <- function() {
+    zip_path <- tempfile(fileext = ".zip")
+    on.exit(unlink(zip_path), add = TRUE)
+
+    download.file(url, zip_path, mode = "wb")
+    has_sha256 <- exists(
+      "sha256sum",
+      envir = asNamespace("tools"),
+      inherits = FALSE
+    )
+    if (has_sha256) {
+      archive_hash <- unname(tools::sha256sum(zip_path))
+      expected_hash <- expected_sha256
+      hash_name <- "SHA-256"
+    } else {
+      archive_hash <- unname(tools::md5sum(zip_path))
+      expected_hash <- expected_md5
+      hash_name <- "MD5"
+    }
+    if (!identical(archive_hash, expected_hash)) {
+      stop("Downloaded dataset failed ", hash_name, " verification")
+    }
+
+    archive_entries <- unzip(zipfile = zip_path, list = TRUE)$Name
+    unsafe_entries <- grepl(
+      "(^|/|\\\\)\\.\\.($|/|\\\\)|^(/|\\\\|[[:alpha:]]:)",
+      archive_entries
+    )
+    if (any(unsafe_entries)) {
+      stop("Downloaded dataset contains unsafe archive paths")
+    }
+
+    unzip(zipfile = zip_path, exdir = getwd())
+  }
+
+  download_dataset()
+}
+
+missing_files <- required_files[!file.exists(required_files)]
+if (length(missing_files)) {
+  stop("Dataset is incomplete; missing: ", paste(missing_files, collapse = ", "))
+}
+
+xTrain <- read.table(dataset_path("train", "X_train.txt"))
+yTrain <- read.table(dataset_path("train", "y_train.txt"))
+xTest <- read.table(dataset_path("test", "X_test.txt"))
+yTest <- read.table(dataset_path("test", "y_test.txt"))
+subTrain <- read.table(dataset_path("train", "subject_train.txt"))
+subTest <- read.table(dataset_path("test", "subject_test.txt"))
+activityLabels <- read.table(dataset_path("activity_labels.txt"))
+features <- read.table(dataset_path("features.txt"))
 ## column names change
 colnames(xTrain) <- features[,2]
 colnames(xTest) <- features[,2]
@@ -110,18 +122,23 @@ setMeanStd <- FinalSet[, M_sd]
 setActivityNames <- merge(setMeanStd, activityLabels, by = "activityID", all.x = T)
 
 ## 4. Labeling the data with descriptive variable names
-colnames(setActivityNames) %<>%
-  gsub("^t", "time", .) %>%
-  gsub("^f", "frequency", .) %>%
-  gsub("Acc", "Accelerometer", .) %>%
-  gsub("Gyro", "Gyroscope", .) %>%
-  gsub("Mag", "Magnitude", .) %>%
-  gsub("BodyBody", "Body", .)
+descriptive_names <- colnames(setActivityNames)
+descriptive_names <- gsub("^t", "time", descriptive_names)
+descriptive_names <- gsub("^f", "frequency", descriptive_names)
+descriptive_names <- gsub("Acc", "Accelerometer", descriptive_names)
+descriptive_names <- gsub("Gyro", "Gyroscope", descriptive_names)
+descriptive_names <- gsub("Mag", "Magnitude", descriptive_names)
+descriptive_names <- gsub("BodyBody", "Body", descriptive_names)
+colnames(setActivityNames) <- descriptive_names
 ## 5. Creating the independent Tidy-Dataset with average of each variable for each activity and subject
 
-TidyDataSet <- setActivityNames %>% 
-  group_by(subjectID,activityID,activityType) %>% 
-  summarise_all(mean)
+grouping_columns <- c("subjectID", "activityID", "activityType")
+measurement_columns <- setdiff(colnames(setActivityNames), grouping_columns)
+TidyDataSet <- aggregate(
+  setActivityNames[measurement_columns],
+  by = setActivityNames[grouping_columns],
+  FUN = mean
+)
+TidyDataSet <- TidyDataSet[order(TidyDataSet$subjectID, TidyDataSet$activityID), ]
 ## Writing the TidyData file
-write.table(TidyDataSet,"TidyDataSet.txt",row.names = F)
-
+write.table(TidyDataSet, "TidyDataSet.txt", row.names = FALSE)

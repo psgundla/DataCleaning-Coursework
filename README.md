@@ -20,11 +20,25 @@ Completed by: Pranav Swaroop Gundla a.k.a BioCoderR :)
 
 ## How to Run the Script
 
-To run the analysis, follow these steps:
+From the repository root, run:
 
-1.  **Download the Data**: If you haven't already, download the data from the following link: [Data for the project](https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip). Extract the contents of the zip file to your working directory.
+```sh
+Rscript run_analysis.R
+```
 
-2.  **Run the Script**: Open R or RStudio and run the `run_analysis.R` script. This script will read the data, perform the necessary transformations, and generate the `TidyDataSet.txt` file with the tidy data set.
+The script requires R and an internet connection on its first run. It uses base R only, with no package installation required. It downloads and extracts the [UCI HAR data](https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip) automatically when any required input file is missing.
+
+Successful execution writes `TidyDataSet.txt` in the current directory. The output contains 180 rows: one average-measurement row for each of 30 subjects and 6 activities. Later runs reuse the extracted `UCI HAR Dataset` directory.
+
+## Smoke Test
+
+Run the clean-directory regression test from the repository root:
+
+```sh
+Rscript tests/smoke_test.R
+```
+
+The test runs a copied `run_analysis.R` in a temporary directory containing the repository's tracked partial dataset, checks that missing data are downloaded, and verifies the complete 180-by-69 tidy output. It requires network access.
 
 ## About the Data
 
@@ -33,5 +47,3 @@ The data used in this project were collected from the accelerometers of the Sams
 ## Code Book
 
 For details about the variables, data, and transformations used in this analysis, please refer to the `CodeBook.md` file in this repository.
-
-Thank you!
